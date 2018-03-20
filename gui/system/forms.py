@@ -1011,7 +1011,12 @@ class ManualUpdateWizard(FileWizard):
             raise
 
 
-class SettingsForm(ModelForm):
+class SettingsForm(MiddlewareModelForm, ModelForm):
+
+    middleware_attr_prefix = 'stg_'
+    middleware_attr_schema = 'general_settings'
+    middleware_plugin = 'generalsystem'
+    is_singletone = True
 
     class Meta:
         fields = '__all__'
@@ -1026,12 +1031,13 @@ class SettingsForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super(SettingsForm, self).__init__(*args, **kwargs)
+        self.original_instance = self._meta.model()
         for i in (
             'stg_guiprotocol', 'stg_guiaddress', 'stg_guiport',
             'stg_guihttpsport', 'stg_guihttpsredirect', 'stg_sysloglevel',
             'stg_syslogserver', 'stg_guicertificate', 'stg_timezone',
         ):
-            setattr(self.instance, f'_original_{i}', getattr(self.instance, i))
+            setattr(self.original_instance, f'_original_{i}', getattr(self.instance, i))
 
         self.fields['stg_language'].choices = settings.LANGUAGES
         self.fields['stg_language'].label = _("Language (Require UI reload)")
@@ -1075,7 +1081,7 @@ class SettingsForm(ModelForm):
             log.error("Fingerprint of the certificate used in the GUI: " + fingerprint)
         return cdata
 
-    def save(self):
+    '''def save(self):
         obj = super(SettingsForm, self).save()
         if (self.instance._original_stg_sysloglevel != self.instance.stg_sysloglevel or
                 self.instance._original_stg_syslogserver != self.instance.stg_syslogserver):
@@ -1084,16 +1090,16 @@ class SettingsForm(ModelForm):
         notifier().reload("timeservices")
         if self.instance._original_stg_timezone != self.instance.stg_timezone:
             notifier().restart("cron")
-        return obj
+        return obj'''
 
     def done(self, request, events):
         if (
-            self.instance._original_stg_guiprotocol != self.instance.stg_guiprotocol or
-            self.instance._original_stg_guiaddress != self.instance.stg_guiaddress or
-            self.instance._original_stg_guiport != self.instance.stg_guiport or
-            self.instance._original_stg_guihttpsport != self.instance.stg_guihttpsport or
-            self.instance._original_stg_guihttpsredirect != self.instance.stg_guihttpsredirect or
-            self.instance._original_stg_guicertificate != self.instance.stg_guicertificate
+            self.original_instance._original_stg_guiprotocol != self.instance.stg_guiprotocol or
+            self.original_instance._original_stg_guiaddress != self.instance.stg_guiaddress or
+            self.original_instance._original_stg_guiport != self.instance.stg_guiport or
+            self.original_instance._original_stg_guihttpsport != self.instance.stg_guihttpsport or
+            self.original_instance._original_stg_guihttpsredirect != self.instance.stg_guihttpsredirect or
+            self.original_instance._original_stg_guicertificate != self.instance.stg_guicertificate
         ):
             if self.instance.stg_guiaddress == "0.0.0.0":
                 address = request.META['HTTP_HOST'].split(':')[0]
@@ -1116,7 +1122,7 @@ class SettingsForm(ModelForm):
                 events.append("evilrestartHttpd('%s')" % newurl)
             else:
                 events.append("restartHttpd('%s')" % newurl)
-        if self.instance._original_stg_timezone != self.instance.stg_timezone:
+        if self.original_instance._original_stg_timezone != self.instance.stg_timezone:
             os.environ['TZ'] = self.instance.stg_timezone
             time.tzset()
             timezone.activate(self.instance.stg_timezone)
